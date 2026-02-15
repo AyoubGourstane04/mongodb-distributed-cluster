@@ -1,0 +1,135 @@
+services:
+
+  # CONFIG SERVER REPLICA SET ---------------------------------------
+  configsvr:
+    image: mongo:7
+    command: mongod --configsvr --replSet configReplSet --port 27017
+    ports:
+      - 27019:27017
+    volumes:
+      - ./data/configsvr:/data/db
+    networks:
+      - mongo-cluster
+
+  # SHARD 1 ----------------------------------------------------------
+  shard1:
+    image: mongo:7
+    command: mongod --shardsvr --replSet shard1ReplSet --port 27017
+    ports:
+      - 27021:27017
+    volumes:
+      - ./data/shard1:/data/db
+    networks:
+      - mongo-cluster
+
+  # SHARD 2 ----------------------------------------------------------
+  shard2:
+    image: mongo:7
+    command: mongod --shardsvr --replSet shard2ReplSet --port 27017
+    ports:
+      - 27022:27017
+    volumes:
+      - ./data/shard2:/data/db
+    networks:
+      - mongo-cluster
+
+  # SHARD 3 ----------------------------------------------------------
+  shard3:
+    image: mongo:7
+    command: mongod --shardsvr --replSet shard3ReplSet --port 27017
+    ports:
+      - 27023:27017
+    volumes:
+      - ./data/shard3:/data/db
+    networks:
+      - mongo-cluster
+
+  # MONGOS ROUTER ----------------------------------------------------
+  mongos:
+    image: mongo:7
+    command: >
+      mongos --configdb configReplSet/configsvr:27017 --bind_ip_all
+    depends_on:
+      - configsvr
+      - shard1
+      - shard2
+      - shard3
+    ports:
+      - 27020:27017
+    networks:
+      - mongo-cluster
+  
+
+  
+# ---------------- MONITORING STACK ----------------
+
+  # 1. PERCONA EXPORTER (The Translator)
+# 1. PERCONA EXPORTER
+# 1. PERCONA EXPORTER
+  mongo-exporter:
+    image: percona/mongodb_exporter:0.47.2
+    restart: always
+    command:
+      - '--mongodb.uri=mongodb://mongos:27017'
+      # Enable Discovery so it finds your databases
+      - '--discovering-mode'
+      
+      # --- ENABLE SPECIFIC COLLECTORS (Using correct names from your logs) ---
+      - '--collector.dbstats'           # Database size/count
+      - '--collector.collstats'         # Collection size/count
+      - '--collector.topmetrics'        # Read/Write time per collection
+      - '--collector.diagnosticdata'    # CPU, Memory, Connections (serverStatus)
+      - '--collector.replicasetstatus'  # Replica set health
+      - '--collector.shards'
+      
+      # --- EXCLUDED TO PREVENT CRASH ---
+      # Do NOT use: --collect-all
+      # Do NOT use: --collector.indexstats
+    ports:
+      - "9216:9216"
+    networks:
+      - mongo-cluster
+    depends_on:
+      - mongos
+
+
+
+  # 2. PROMETHEUS (The Database for Metrics)
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - mongo-cluster
+    depends_on:
+      - mongo-exporter
+
+  # 3. GRAFANA (The Dashboard)
+  grafana:
+    image: grafana/grafana:10.1.0
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=password123
+    networks:
+      - mongo-cluster
+    depends_on:
+      - prometheus
+
+  test-runner:
+    build: ./test_runner
+    ports:
+      - "8001:8001" # Expose metrics
+    networks:
+      - mongo-cluster
+    depends_on:
+      - mongos
+
+
+networks:
+  mongo-cluster:
+    driver: bridge
+
