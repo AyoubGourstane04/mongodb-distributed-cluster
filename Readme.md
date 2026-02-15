@@ -1,16 +1,13 @@
-Below is your **clean, GitHub-ready `README.md`**, rewritten **exactly from your updated text**, fully structured, formatted, and ready to paste into GitHub.
 
----
+# Project Playbook: Distributed Marketplace Catalog
 
-# 🛒 Project Playbook: Distributed Marketplace Catalog
+## Project Context
 
-## 📋 Project Context
-
-### 🎯 Goal
+### Goal
 
 Deploy a **highly available, sharded MongoDB infrastructure** for a marketplace with millions of products.
 
-### ✅ Key Requirements Addressed
+### Key Requirements Addressed
 
 * **Availability:** Replica Sets for shards and config servers
 * **Scalability:** 3 distinct shards
@@ -21,7 +18,7 @@ Deploy a **highly available, sharded MongoDB infrastructure** for a marketplace 
 
 ---
 
-# 🏗️ Phase 1: Infrastructure Initialization
+# Phase 1: Infrastructure Initialization
 
 Before creating the database, we must launch the physical nodes and link them together.
 
@@ -35,7 +32,7 @@ Run:
 docker-compose up -d
 ```
 
-### 🔍 What this does
+### What this does
 
 Starts 6+ containers:
 
@@ -61,7 +58,7 @@ rs.initiate({
 })
 ```
 
-### 🔍 Explanation
+### Explanation
 
 * `configsvr: true` tells MongoDB that this is **not** a normal database.
 * The `mongos` router cannot function without metadata from the config server.
@@ -111,7 +108,7 @@ rs.initiate({
 })
 ```
 
-### 🔍 Why Replica Sets?
+### Why Replica Sets?
 
 Sharding **requires** the Oplog → only available in Replica Set mode.
 
@@ -131,13 +128,13 @@ sh.addShard("shard2ReplSet/shard2:27017")
 sh.addShard("shard3ReplSet/shard3:27017")
 ```
 
-### 🔍 What this does
+### What this does
 
 Updates the Config Server’s metadata → the cluster now officially has 3 shards.
 
 ---
 
-# 🧠 Phase 2: Schema Design & Sharding Strategy
+# Phase 2: Schema Design & Sharding Strategy
 
 ⚠️ All commands from this point forward run inside the **mongos shell**.
 
@@ -149,7 +146,7 @@ Updates the Config Server’s metadata → the cluster now officially has 3 shar
 sh.stopBalancer()
 ```
 
-### 🔍 Why?
+### Why?
 
 Prevents automatic data migration while performing manual chunk operations.
 
@@ -170,7 +167,7 @@ db.products.createIndex({ "attributes.k": 1, "attributes.v": 1 })
 db.products.createIndex({ "name": "text" })
 ```
 
-### 🔍 Why Composite Indexes?
+### Why Composite Indexes?
 
 Improves multi-criteria searches and removes in-memory sorting.
 
@@ -182,14 +179,14 @@ Improves multi-criteria searches and removes in-memory sorting.
 sh.shardCollection("marketplace.products", { category_id: 1, _id: 1 })
 ```
 
-### 🔍 Why this sharding strategy?
+### Why this sharding strategy?
 
 * `category_id` = Targeted queries (e.g., "Electronics")
 * `_id` = Ensures uniqueness within each shard
 
 ---
 
-# ⚡ Phase 3: Pre-Splitting (Advanced Optimization)
+# Phase 3: Pre-Splitting (Advanced Optimization)
 
 If you import data now, it will all land in Shard 1.
 We manually pre-split chunks to distribute load.
@@ -208,7 +205,7 @@ for (var i = 1; i < 100; i++) {
 }
 ```
 
-### 🔍 What this does
+### What this does
 
 Defines empty chunk boundaries for categories 1 → 99.
 
@@ -228,7 +225,7 @@ for (var i = 0; i < 100; i++) {
 }
 ```
 
-### 🔍 Expected Distribution
+### Expected Distribution
 
 * Shard 1 → categories 1, 4, 7…
 * Shard 2 → categories 2, 5, 8…
@@ -238,7 +235,7 @@ for (var i = 0; i < 100; i++) {
 
 ---
 
-# 📦 Phase 4: Data Injection
+# Phase 4: Data Injection
 
 ### Import data
 
@@ -267,9 +264,10 @@ docker cp generated_data\vendors.json mongodb-sharded-mongos-1:/vendors.json
 
 docker exec -it mongodb-sharded-mongos-1 mongoimport --host localhost --port 27017 --db marketplace --collection vendors --file /vendors.json --jsonArray
 ```
+
 ---
 
-# ✅ Phase 5: Verification & Maintenance
+# Phase 5: Verification & Maintenance
 
 ## **Step 10: Restart the Balancer**
 
@@ -293,7 +291,7 @@ Expected output → Roughly:
 
 ---
 
-# 📊 Phase 6: Monitoring & Observability Stack
+# Phase 6: Monitoring & Observability Stack
 
 Your `docker-compose.yml` includes a complete observability pipeline:
 
